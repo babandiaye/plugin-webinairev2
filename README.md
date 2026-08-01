@@ -102,6 +102,10 @@ en HTTPS sur le domaine configuré (ou l'un de ses sous-domaines).
   enregistrements avec lecture/téléchargement/suppression).
 - `db/install.xml` / `db/upgrade.php` — table Moodle `webinairev2` (id, course,
   name, intro, roomid, roomname, moderatorroles, timestamps).
+- `pix/icon.png` — icône de l'activité, 256×256 avec transparence, dérivée du
+  favicon de webinairev2 (`apps/frontend/public/favicon.png`, la marque sans le
+  mot « WEBINAIRE », illisible à la taille d'une icône). Pour la régénérer :
+  `convert favicon.png -resize 256x256 -strip pix/icon.png`.
 
 ## Dépendance de version avec le backend
 
