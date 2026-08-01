@@ -1,0 +1,20 @@
+# Secrets / variables d'environnement — la configuration du plugin (URL de la
+# plateforme, clé API) vit dans la base Moodle, pas dans un fichier ; ce bloc
+# reste un filet de sécurité.
+.env
+.env.*
+env.*
+!env.example
+
+# Clés et certificats — aucun n'a de raison d'être dans ce dépôt.
+*.pem
+*.key
+*.crt
+*.p12
+
+# Résidus d'éditeur et de système de fichiers
+*.swp
+*~
+.DS_Store
+.idea/
+.vscode/
