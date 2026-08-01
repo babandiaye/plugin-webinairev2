@@ -119,3 +119,4 @@ backend en dernier, ou les deux ensemble.
   Keycloak valide peut rejoindre une fois qu'un modérateur est présent.
 - Pas de pages séparées host/viewer : une seule UI de salle côté webinairev2,
   avec des droits modérateur/participant déterminés par le token LiveKit émis.
+# plugin-webinairev2
