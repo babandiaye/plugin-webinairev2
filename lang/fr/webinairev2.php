@@ -39,10 +39,11 @@ $string['statusscheduled']         = 'Session planifiée';
 $string['statusscheduled_desc']    = 'Aucune session en cours pour le moment.';
 $string['startsession']            = 'Démarrer la session';
 $string['startsession_desc']       = 'Lancez une nouvelle session de webinaire.';
-$string['startsession_relaunch']   = 'Relancez si nécessaire.';
+$string['startsession_relaunch']   = 'Cette séance est terminée, vous pouvez en relancer une.';
 $string['joinsession']             = 'Rejoindre la session';
 $string['joinsession_desc']        = 'Rejoignez la session en cours.';
 $string['notliveyet']              = 'La session n\'est pas encore en direct.';
+$string['sessionover']             = 'Cette séance est terminée.';
 
 // Enregistrements
 $string['recordings']              = 'Enregistrements';

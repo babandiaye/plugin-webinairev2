@@ -200,31 +200,42 @@ if ($apiError) {
 
     echo html_writer::start_div('', ['style' => 'display:flex;flex-direction:column;align-items:flex-start;gap:4px;']);
 
-    // Modérateur : toujours le droit de (re)lancer sa salle, quel que soit son
-    // statut — c'est webinairev2/RoomsService.join() qui gère le redémarrage.
-    if ($isModerator) {
-        echo html_writer::link($launchUrl,
-            webinairev2_icon('play', 16) . ' ' . get_string('startsession', 'mod_webinairev2'),
-            ['style' => 'display:inline-flex;align-items:center;gap:8px;padding:10px 24px;background:#0065b1;' .
-                'color:white;border-radius:8px;text-decoration:none;font-weight:600;']
-        );
-        echo html_writer::div(
-            $roomStatus === 'LIVE'
-                ? get_string('startsession_relaunch', 'mod_webinairev2')
-                : get_string('startsession_desc', 'mod_webinairev2'),
-            '', ['style' => 'color:#9ca3af;font-size:0.8rem;']
-        );
-    } elseif ($roomStatus === 'LIVE') {
+    // L'ÉTAT DE LA SÉANCE d'abord, le rôle ensuite. Tester le rôle en premier
+    // faisait lire « Démarrer la session » à un enseignant qui arrivait sur une
+    // séance déjà en cours, ce qu'il ne fait pourtant pas : il la rejoint.
+    // Le lien de lancement est le MÊME dans les deux branches — seul l'intitulé
+    // change, aucune capacité n'est perdue. Un modérateur garde de toute façon
+    // le droit de relancer une salle quel que soit son statut, c'est
+    // webinairev2/RoomsService.join() qui s'en charge côté plateforme.
+    $buttonStyle = 'display:inline-flex;align-items:center;gap:8px;padding:10px 24px;background:#0065b1;' .
+        'color:white;border-radius:8px;text-decoration:none;font-weight:600;';
+
+    if ($roomStatus === 'LIVE') {
         echo html_writer::link($launchUrl,
             webinairev2_icon('eye', 16) . ' ' . get_string('joinsession', 'mod_webinairev2'),
-            ['style' => 'display:inline-flex;align-items:center;gap:8px;padding:10px 24px;background:#fff;' .
-                'color:#0065b1;border:1.5px solid #0065b1;border-radius:8px;text-decoration:none;font-weight:600;']
+            ['style' => $buttonStyle]
         );
         echo html_writer::div(get_string('joinsession_desc', 'mod_webinairev2'),
             '', ['style' => 'color:#9ca3af;font-size:0.8rem;']
         );
+    } elseif ($isModerator) {
+        echo html_writer::link($launchUrl,
+            webinairev2_icon('play', 16) . ' ' . get_string('startsession', 'mod_webinairev2'),
+            ['style' => $buttonStyle]
+        );
+        echo html_writer::div(
+            $roomStatus === 'ENDED'
+                ? get_string('startsession_relaunch', 'mod_webinairev2')
+                : get_string('startsession_desc', 'mod_webinairev2'),
+            '', ['style' => 'color:#9ca3af;font-size:0.8rem;']
+        );
     } else {
-        echo html_writer::div(get_string('notliveyet', 'mod_webinairev2'),
+        // « Pas encore en direct » contredisait le badge « Session terminée »
+        // juste à côté pour un participant arrivant après coup.
+        echo html_writer::div(
+            $roomStatus === 'ENDED'
+                ? get_string('sessionover', 'mod_webinairev2')
+                : get_string('notliveyet', 'mod_webinairev2'),
             '', ['style' => 'color:#9ca3af;font-size:0.85rem;']
         );
     }

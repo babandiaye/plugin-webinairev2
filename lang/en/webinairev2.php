@@ -39,10 +39,11 @@ $string['statusscheduled']         = 'Session scheduled';
 $string['statusscheduled_desc']    = 'No session in progress right now.';
 $string['startsession']            = 'Start session';
 $string['startsession_desc']       = 'Start a new webinar session.';
-$string['startsession_relaunch']   = 'Restart it if needed.';
+$string['startsession_relaunch']   = 'This session has ended; you can start a new one.';
 $string['joinsession']             = 'Join session';
 $string['joinsession_desc']        = 'Join the session in progress.';
 $string['notliveyet']              = 'The session is not live yet.';
+$string['sessionover']             = 'This session has ended.';
 
 // Recordings
 $string['recordings']              = 'Recordings';
