@@ -36,8 +36,8 @@ if ($isModerator) {
     \mod_webinairev2\event\session_joined::create(['context' => $context, 'objectid' => $instance->id])->trigger();
 }
 
-// L'URL de retour n'est PAS passée ici : elle a déjà été transmise
-// serveur-à-serveur (syncUser, à chaque affichage de view.php) et mémorisée sur
-// la salle côté webinairev2, qui y renverra l'utilisateur en fin de séance.
+// Le lien porte un marqueur de provenance (from=moodle), pas l'URL de retour :
+// celle-ci a déjà été transmise serveur-à-serveur (syncUser, à chaque affichage
+// de view.php) et mémorisée sur la salle. Voir buildJoinUrl.
 $api = new mod_webinairev2_api();
 redirect($api->buildJoinUrl($instance->roomid));

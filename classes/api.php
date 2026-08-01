@@ -219,13 +219,20 @@ class mod_webinairev2_api {
     // transmise : webinairev2 authentifie lui-même l'utilisateur via son propre
     // SSO Keycloak (partagé avec Moodle) quand il ouvre ce lien.
     //
-    // Aucune URL de retour n'est passée ici : elle est transmise
-    // serveur-à-serveur (createRoom puis syncUser) et mémorisée sur la salle.
-    // Elle ne transite donc jamais par la barre d'adresse, où n'importe qui
-    // pourrait la remplacer et faire de webinairev2 le tremplin d'une
-    // redirection vers un site tiers.
+    // `from=moodle` est un simple MARQUEUR DE PROVENANCE, pas une destination :
+    // il dit à webinairev2 « cette personne arrive d'une activité Moodle », et
+    // c'est la seule condition sous laquelle la salle la renverra vers Moodle en
+    // fin de séance. L'URL de retour elle-même reste côté serveur (transmise par
+    // createRoom/syncUser, mémorisée sur la salle) — la mettre ici, comme le fait
+    // mod_livestream, permettrait à n'importe qui de la remplacer et de faire de
+    // webinairev2 le tremplin d'une redirection vers un site tiers.
+    //
+    // Sans ce marqueur, quelqu'un qui ouvre directement preprod-webinairev2 et
+    // n'a jamais vu Moodle se retrouvait renvoyé vers le Moodle de la salle en
+    // quittant la séance : l'URL de retour appartient à CETTE arrivée-là, pas à
+    // la salle, qui est partagée par tous ses participants.
     public function buildJoinUrl(string $roomId): string {
-        return $this->baseUrl . '/rooms/' . $this->validateId($roomId, 'roomId');
+        return $this->baseUrl . '/rooms/' . $this->validateId($roomId, 'roomId') . '?from=moodle';
     }
 
     // URL de la page d'activité de CETTE plateforme Moodle, où webinairev2

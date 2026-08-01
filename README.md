@@ -75,12 +75,22 @@ qu'une salle, en n'appelant `createRoom` que depuis `webinairev2_add_instance`.
 En quittant la séance, l'utilisateur revient sur la page de l'activité d'où il
 est parti, et non sur l'accueil de webinairev2.
 
-L'URL de retour est transmise **par l'API serveur-à-serveur** (`createRoom`,
-puis `syncUser` à chaque affichage de l'activité) et mémorisée sur la salle.
-Elle ne transite jamais par la barre d'adresse : un paramètre `?returnUrl=`
-serait modifiable par n'importe qui et ferait de webinairev2 le tremplin d'une
-redirection vers un site tiers. Le backend n'accepte par ailleurs que du
-`http(s)`.
+Deux morceaux, délibérément séparés :
+
+- **La destination** est transmise par l'API serveur-à-serveur (`createRoom`,
+  puis `syncUser` à chaque affichage de l'activité) et mémorisée sur la salle.
+  Elle ne transite jamais par la barre d'adresse : un paramètre `?returnUrl=`
+  serait modifiable par n'importe qui et ferait de webinairev2 le tremplin
+  d'une redirection vers un site tiers. Le backend n'accepte que du `http(s)`.
+- **Le déclencheur** est un simple marqueur sur le lien de lancement,
+  `/rooms/{id}?from=moodle` (voir `buildJoinUrl`). Sans lui, webinairev2 ne
+  renvoie nulle part.
+
+Cette séparation est nécessaire parce que la salle est **partagée** : elle est
+rattachée à une activité Moodle, mais tous ses participants n'en viennent pas.
+Quelqu'un qui ouvre `preprod-webinairev2.unchk.sn` directement doit y rester en
+fin de séance — sans le marqueur, il était expédié vers un Moodle qu'il n'avait
+jamais ouvert. L'URL de retour appartient à *une arrivée*, pas à la salle.
 
 Sa réémission à chaque affichage sert de rattrapage : les salles créées avant
 l'introduction du champ se remplissent seules à la première visite, et un
