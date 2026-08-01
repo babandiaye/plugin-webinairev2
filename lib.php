@@ -167,6 +167,17 @@ function webinairev2_add_instance(stdClass $data, mod_webinairev2_mod_form $mfor
     try {
         $id = $DB->insert_record('webinairev2', $data);
 
+        // SEUL appelant de createRoom, et il ne s'exécute qu'à la création de
+        // l'activité : c'est ce qui garantit qu'une activité n'a qu'une salle.
+        // Le backend, lui, ne peut plus dédupliquer — deux plateformes Moodle
+        // sur un même webinairev2 produisent les mêmes identifiants d'activité
+        // (voir le commentaire de mod_webinairev2_api::createRoom).
+        // $data->coursemodule : cmid attribué avant l'appel à add_instance, donc
+        // disponible ici pour construire l'URL de retour définitive.
+        $returnUrl = !empty($data->coursemodule)
+            ? mod_webinairev2_api::buildReturnUrl((int)$data->coursemodule)
+            : '';
+
         $api    = new mod_webinairev2_api();
         $result = $api->createRoom(
             (string)$data->course,
@@ -174,7 +185,8 @@ function webinairev2_add_instance(stdClass $data, mod_webinairev2_mod_form $mfor
             $data->name,
             $USER->email,
             fullname($USER),
-            $data->intro ?? ''
+            $data->intro ?? '',
+            $returnUrl
         );
 
         $DB->set_field('webinairev2', 'roomid',   $result['roomId'],   ['id' => $id]);

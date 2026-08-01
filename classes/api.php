@@ -108,17 +108,26 @@ class mod_webinairev2_api {
         return is_array($decoded) ? $decoded : [];
     }
 
-    // Idempotent : rappelé plusieurs fois avec le même meetingId, ne crée la
-    // salle qu'une seule fois côté webinairev2 (voir MoodleService.createOrGetRoom).
-    public function createRoom(string $courseId, string $meetingId, string $title, string $teacherEmail, string $teacherName, string $description = ''): array {
-        return $this->request('POST', '/moodle/rooms', [
+    // NON idempotent : chaque appel crée une salle NEUVE côté webinairev2. Le
+    // backend ne peut pas dédupliquer par meetingId — cet identifiant n'est
+    // unique qu'au sein d'une plateforme Moodle, et plusieurs plateformes
+    // partagent le même backend (deux activités n°1 sur deux Moodle différents
+    // se retrouvaient rattachées à la même salle). C'est donc à CE plugin de ne
+    // l'appeler qu'une fois : uniquement depuis webinairev2_add_instance,
+    // jamais à l'affichage de l'activité.
+    public function createRoom(string $courseId, string $meetingId, string $title, string $teacherEmail, string $teacherName, string $description = '', string $returnUrl = ''): array {
+        $payload = [
             'courseId'     => $courseId,
             'meetingId'    => $meetingId,
             'title'        => $title,
             'description'  => $description,
             'teacherEmail' => $this->validateEmail($teacherEmail),
             'teacherName'  => $this->sanitizeName($teacherName),
-        ]);
+        ];
+        if ($returnUrl !== '') {
+            $payload['returnUrl'] = $returnUrl;
+        }
+        return $this->request('POST', '/moodle/rooms', $payload);
     }
 
     public function getRoomStatus(string $roomId): array {
@@ -190,19 +199,40 @@ class mod_webinairev2_api {
     // la capacité Moodle mod/webinairev2:moderate, pas un champ de la table
     // Moodle : webinairev2 applique lui-même la règle "promotion jamais
     // rétrogradation" (voir MoodleService.syncUser côté backend).
-    public function syncUser(string $roomId, string $email, string $name, bool $isTeacher): array {
-        return $this->request('POST', '/moodle/users/sync', [
+    public function syncUser(string $roomId, string $email, string $name, bool $isTeacher, string $returnUrl = ''): array {
+        $payload = [
             'roomId'    => $this->validateId($roomId, 'roomId'),
             'email'     => $this->validateEmail($email),
             'name'      => $this->sanitizeName($name),
             'isTeacher' => $isTeacher,
-        ]);
+        ];
+        // Réémise à chaque affichage : rattrape les salles créées avant
+        // l'introduction du champ, et suit un déplacement de l'activité (le
+        // cmid change, donc l'URL de retour aussi) sans appel supplémentaire.
+        if ($returnUrl !== '') {
+            $payload['returnUrl'] = $returnUrl;
+        }
+        return $this->request('POST', '/moodle/users/sync', $payload);
     }
 
     // Construit le lien vers la salle webinairev2 — aucun jeton, aucune identité
     // transmise : webinairev2 authentifie lui-même l'utilisateur via son propre
     // SSO Keycloak (partagé avec Moodle) quand il ouvre ce lien.
+    //
+    // Aucune URL de retour n'est passée ici : elle est transmise
+    // serveur-à-serveur (createRoom puis syncUser) et mémorisée sur la salle.
+    // Elle ne transite donc jamais par la barre d'adresse, où n'importe qui
+    // pourrait la remplacer et faire de webinairev2 le tremplin d'une
+    // redirection vers un site tiers.
     public function buildJoinUrl(string $roomId): string {
         return $this->baseUrl . '/rooms/' . $this->validateId($roomId, 'roomId');
+    }
+
+    // URL de la page d'activité de CETTE plateforme Moodle, où webinairev2
+    // renverra l'utilisateur en fin de séance. Chaque salle porte celle de son
+    // Moodle d'origine : plusieurs plateformes peuvent partager un même backend
+    // sans qu'aucune liste d'origines n'ait à y être configurée.
+    public static function buildReturnUrl(int $cmid): string {
+        return (new moodle_url('/mod/webinairev2/view.php', ['id' => $cmid]))->out(false);
     }
 }

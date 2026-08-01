@@ -38,7 +38,6 @@ function webinairev2_icon(string $name, int $size = 18): string {
         'check'    => '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>',
         'clock'    => '<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>',
         'video'    => '<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>',
-        'download' => '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>',
         'trash'    => '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>',
     ];
     if (!isset($paths[$name])) {
@@ -105,7 +104,12 @@ if (!empty($instance->roomid)) {
     // ratée ne doit jamais empêcher l'affichage du statut/des enregistrements
     // ci-dessous (l'utilisateur pourra être inscrit manuellement en attendant).
     try {
-        $api->syncUser($instance->roomid, $USER->email, fullname($USER), $isModerator);
+        // Transmet aussi l'URL de CETTE page : c'est là que webinairev2 renverra
+        // l'utilisateur en fin de séance. Réémise à chaque affichage, elle
+        // rattrape les salles créées avant l'introduction du champ et suit un
+        // déplacement de l'activité, sans appel HTTP supplémentaire.
+        $api->syncUser($instance->roomid, $USER->email, fullname($USER), $isModerator,
+            mod_webinairev2_api::buildReturnUrl((int)$cm->id));
     } catch (Exception $e) {
         debugging('webinairev2 sync error: ' . $e->getMessage(), DEBUG_DEVELOPER);
     }
@@ -251,15 +255,16 @@ if (empty($recordings)) {
 } else {
     $playerData = [];
 
+    // Mise en page reprise telle quelle de mod_livestream (V14/V16) : mêmes
+    // colonnes, mêmes boutons-icônes, même comportement de lecture en place.
     $table        = new html_table();
     $table->head  = [
         get_string('view'),
         get_string('recordingname', 'mod_webinairev2'),
         get_string('date'),
         get_string('duration', 'mod_webinairev2'),
-        get_string('size', 'mod_webinairev2'),
     ];
-    $table->align = ['left', 'left', 'left', 'left', 'left'];
+    $table->align = ['left', 'left', 'left', 'left'];
     // La colonne « Actions » ne contient que la corbeille : inutile de la
     // laisser, vide, à ceux qui n'ont pas le droit de supprimer.
     if ($canDelete) {
@@ -271,10 +276,8 @@ if (empty($recordings)) {
         $safeId   = preg_replace('/[^a-zA-Z0-9_-]/', '', (string)$rec['id']);
         $playerId = 'wv2-player-' . $safeId;
 
-        $playUrl     = (string)($rec['playUrl'] ?? '');
-        $downloadUrl = (string)($rec['downloadUrl'] ?? '');
-        $canPlay     = $playUrl !== '' && $api->isSafeMediaUrl($playUrl);
-        $canDownload = $downloadUrl !== '' && $api->isSafeMediaUrl($downloadUrl);
+        $playUrl = (string)($rec['playUrl'] ?? '');
+        $canPlay = $playUrl !== '' && $api->isSafeMediaUrl($playUrl);
 
         if ($canPlay) {
             $playerData[$playerId] = $playUrl;
@@ -294,27 +297,21 @@ if (empty($recordings)) {
             'style' => 'display:none;margin-top:10px;',
         ]);
 
-        // Téléchargement ouvert à tous les inscrits qui voient l'activité :
-        // le lien porte un jeton signé et expirant émis par webinairev2, il
-        // n'expose ni clé de stockage ni URL permanente.
-        if ($canDownload) {
-            $downloadLink = html_writer::link($downloadUrl,
-                webinairev2_icon('download', 14) . ' ' . get_string('downloadrecording', 'mod_webinairev2'),
-                ['style' => 'display:inline-flex;align-items:center;gap:6px;color:#0065b1;font-size:0.85rem;']
-            );
-        } else {
-            $downloadLink = '';
-        }
+        // Aucun lien de téléchargement séparé : les contrôles natifs du lecteur
+        // <video> déplié par le bouton « Voir » l'offrent déjà, et l'ajouter
+        // ici alourdissait la ligne pour rien. Mise en page identique à
+        // mod_livestream.
+        $duration = !empty($rec['duration'])
+            ? round((int)$rec['duration'] / 60) . ' min'
+            : '—';
+        $date = userdate(strtotime((string)$rec['date']), get_string('strftimedatefullshort', 'langconfig'));
 
-        $duration = !empty($rec['duration']) ? format_time((int)$rec['duration']) : '—';
-        $size     = !empty($rec['sizeBytes']) ? display_size((int)$rec['sizeBytes']) : '—';
-        $date     = userdate(strtotime((string)$rec['date']), get_string('strftimedatetimeshort', 'langconfig'));
-
-        $namecell = html_writer::div(format_string((string)$rec['name']), '', ['style' => 'font-weight:500;'])
-            . ($downloadLink !== '' ? html_writer::div($downloadLink, '', ['style' => 'margin-top:2px;']) : '')
+        // Petite icône vidéo devant le nom du fichier (mod_livestream V14).
+        $namecell = html_writer::span(webinairev2_icon('video', 15), '', ['style' => 'color:#9ca3af;margin-right:8px;'])
+            . format_string((string)$rec['name'])
             . $playerDiv;
 
-        $row = [$viewBtn, $namecell, $date, $duration, $size];
+        $row = [$viewBtn, $namecell, $date, $duration];
 
         if ($canDelete) {
             $deleteUrl = new moodle_url('/mod/webinairev2/view.php', [
@@ -324,9 +321,11 @@ if (empty($recordings)) {
                 'recordingid' => $rec['id'],
                 'sesskey'     => sesskey(),
             ]);
-            $row[] = html_writer::link($deleteUrl, webinairev2_icon('trash', 16), [
+            // Bouton-icône corbeille, même habillage que mod_livestream (V14).
+            $row[] = html_writer::link($deleteUrl, webinairev2_icon('trash', 15), [
                 'title'   => get_string('deleterecording', 'mod_webinairev2'),
-                'style'   => 'display:inline-flex;color:#e53e3e;',
+                'style'   => 'display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;' .
+                    'color:#e53e3e;background:#fff;border:1.5px solid #fecaca;border-radius:8px;text-decoration:none;',
                 'onclick' => 'return confirm(' . json_encode(
                         get_string('confirmdeleterecording', 'mod_webinairev2'),
                         JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
@@ -383,6 +382,7 @@ if (empty($recordings)) {
 
 echo html_writer::tag('style', "
 @keyframes wv2-blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.wv2-play-btn:hover { background:#d7e9f7 !important; }
 ");
 
 echo $OUTPUT->footer();

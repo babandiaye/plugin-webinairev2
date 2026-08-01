@@ -11,8 +11,9 @@ jamais de jeton d'accès LiveKit et ne transmet jamais d'identité par email pou
 rejoindre une session**. Il ne fait que deux choses :
 
 1. Appelle l'API serveur-à-serveur de webinairev2 (`X-Api-Key`) pour des actions
-   purement administratives : créer/retrouver la salle liée à l'activité, lire
-   son statut, lister/supprimer les enregistrements.
+   purement administratives : créer la salle liée à l'activité, lire son statut,
+   lister/supprimer les enregistrements, synchroniser l'inscription au cours et
+   l'URL de retour.
 2. Renvoie l'utilisateur vers un lien direct `https://.../rooms/{roomId}` sur
    webinairev2, qui gère lui-même l'authentification (SSO Keycloak partagé avec
    Moodle) et l'autorisation (modérateur = créateur de la salle ou rôle global
@@ -48,28 +49,70 @@ choix explicite (« seuls les deux cas ci-dessus modèrent »).
 La sélection proposée à la création d'une nouvelle activité vient du réglage de
 site *Rôles modérateurs par défaut*.
 
+## Plusieurs plateformes Moodle sur un même backend
+
+Ce plugin peut être installé sur **plusieurs Moodle pointant tous vers le même
+webinairev2**. Deux conséquences, réglées dans le code :
+
+**Aucune configuration propre à une plateforme n'existe côté webinairev2.** Ni
+liste blanche de domaines, ni variable de build : tout ce qui est spécifique à
+un Moodle voyage avec la salle, transmis serveur-à-serveur par le plugin.
+
+**L'identifiant d'activité n'est pas une clé de salle.** `meetingId` est l'id de
+la ligne `webinairev2` : il n'est unique qu'au sein d'*une* plateforme, et
+l'activité n°1 de chaque Moodle porte la même valeur. `POST /moodle/rooms` crée
+donc **toujours une salle neuve**, identifiée par un cuid possédé par le
+backend ; `moodleCourseId`/`moodleMeetingId` ne sont conservés que comme
+métadonnées de provenance. C'est le plugin qui garantit qu'une activité n'a
+qu'une salle, en n'appelant `createRoom` que depuis `webinairev2_add_instance`.
+
+> `mod_livestream` a vécu l'incident correspondant le 27/07/2026 — « TEST
+> Integration DISIDEV » rattachée à « Introduction au droit » — et a retiré la
+> même logique de réutilisation.
+
+## Retour vers Moodle en fin de séance
+
+En quittant la séance, l'utilisateur revient sur la page de l'activité d'où il
+est parti, et non sur l'accueil de webinairev2.
+
+L'URL de retour est transmise **par l'API serveur-à-serveur** (`createRoom`,
+puis `syncUser` à chaque affichage de l'activité) et mémorisée sur la salle.
+Elle ne transite jamais par la barre d'adresse : un paramètre `?returnUrl=`
+serait modifiable par n'importe qui et ferait de webinairev2 le tremplin d'une
+redirection vers un site tiers. Le backend n'accepte par ailleurs que du
+`http(s)`.
+
+Sa réémission à chaque affichage sert de rattrapage : les salles créées avant
+l'introduction du champ se remplissent seules à la première visite, et un
+déplacement de l'activité (le cmid change) est suivi sans intervention.
+
 ## Enregistrements
 
 La page de l'activité liste les enregistrements prêts de la salle, **paginés
 côté serveur** (réglage de site *Enregistrements par page*, 10 par défaut) :
-chaque ligne affichée coûte deux jetons HMAC signés, inutile de les émettre
-pour des lignes jamais vues.
+chaque ligne affichée coûte un jeton HMAC signé, inutile d'en émettre pour des
+lignes jamais vues.
+
+Mise en page reprise de `mod_livestream` : `Voir | Nom | Date | Durée`, plus une
+colonne `Actions` visible des seuls administrateurs du site.
 
 | Action | Qui |
 |---|---|
-| Lire dans la page (lecteur `<video>`, `Content-Disposition: inline`) | tout utilisateur qui voit l'activité |
-| Télécharger (`Content-Disposition: attachment`) | tout utilisateur qui voit l'activité |
+| Lire dans la page (lecteur `<video>` déplié par le bouton « Voir ») | tout utilisateur qui voit l'activité |
 | Supprimer | **administrateurs du site uniquement** (`is_siteadmin()`) |
+
+Pas de lien de téléchargement séparé : les contrôles natifs du lecteur `<video>`
+l'offrent déjà, le lien étant servi en `Content-Disposition: inline`.
 
 La suppression efface le fichier dans le stockage objet, pas seulement la ligne
 en base : c'est irréversible et hors de portée d'une restauration de cours.
 `is_siteadmin()` est délibérément préféré à une capacité dédiée — il n'est pas
 délégable par attribution d'un rôle. Même arbitrage que `mod_livestream` (V16).
 
-Les liens de lecture et de téléchargement sont des URL signées et expirant au
-bout de 30 minutes, émises par webinairev2 : aucune clé de stockage ni URL
-permanente n'est exposée. Le plugin refuse d'afficher une URL qui ne serait pas
-en HTTPS sur le domaine configuré (ou l'un de ses sous-domaines).
+Les liens de lecture sont des URL signées et expirant au bout de 30 minutes,
+émises par webinairev2 : aucune clé de stockage ni URL permanente n'est exposée.
+Le plugin refuse d'afficher une URL qui ne serait pas en HTTPS sur le domaine
+configuré (ou l'un de ses sous-domaines).
 
 ## Installation
 
@@ -93,13 +136,13 @@ en HTTPS sur le domaine configuré (ou l'un de ses sous-domaines).
 
 - `lib.php` — cycle de vie de l'instance **et** les règles d'autorisation :
   `webinairev2_is_moderator()`, `webinairev2_can_delete_recording()`.
-- `classes/api.php` — client HTTP vers `/api/moodle/*` (création idempotente de
-  salle, statut, enregistrements paginés, garde d'URL média).
+- `classes/api.php` — client HTTP vers `/api/moodle/*` (création de salle,
+  statut, enregistrements paginés, garde d'URL média, URL de retour).
 - `mod_form.php` — formulaire de l'activité, dont la section *Modération*.
 - `launch.php` — point de passage journalisant l'événement (démarré/rejoint)
   puis redirection immédiate vers webinairev2, sans jeton.
 - `view.php` — page de l'activité (statut en direct, liste paginée des
-  enregistrements avec lecture/téléchargement/suppression).
+  enregistrements avec lecture en place et suppression).
 - `db/install.xml` / `db/upgrade.php` — table Moodle `webinairev2` (id, course,
   name, intro, roomid, roomname, moderatorroles, timestamps).
 - `pix/icon.png` — icône de l'activité, 256×256 avec transparence, dérivée du
@@ -109,12 +152,19 @@ en HTTPS sur le domaine configuré (ou l'un de ses sous-domaines).
 
 ## Dépendance de version avec le backend
 
-`GET /api/moodle/rooms/{id}/recordings` renvoie depuis la version `2026080100`
-une réponse paginée `{ recordings, total, page, perPage }` au lieu d'un tableau
-nu. `classes/api.php` accepte **les deux formes** : mettre à jour le plugin
-avant le backend dégrade la page à « tout sur une seule page », sans erreur.
-L'inverse (backend à jour, plugin ancien) casserait la liste — déployer le
-backend en dernier, ou les deux ensemble.
+Deux changements de contrat côté webinairev2 accompagnent ce plugin :
+
+- `GET /api/moodle/rooms/{id}/recordings` renvoie une réponse paginée
+  `{ recordings, total, page, perPage }` au lieu d'un tableau nu.
+  `classes/api.php` accepte **les deux formes** : mettre à jour le plugin avant
+  le backend dégrade la page à « tout sur une seule page », sans erreur.
+  L'inverse (backend à jour, plugin ancien) casserait la liste.
+- `POST /api/moodle/rooms` ne déduplique plus par `meetingId` et accepte
+  `returnUrl`. Un plugin ancien continue de fonctionner, sans retour vers
+  Moodle — mais il perd l'idempotence côté serveur, sur laquelle il ne
+  s'appuyait de toute façon que via `add_instance`.
+
+Déployer le backend en dernier, ou les deux ensemble.
 
 ## Non repris de mod_livestream
 
